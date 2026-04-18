@@ -1,0 +1,28 @@
+project:
+  name: textforge
+  random_seed: 42
+
+runtime:
+  log_level: INFO
+
+dataset_target:
+  task: gpt_pretrain
+  target_domain: mixed
+  approximate_token_budget: 10000000
+  token_estimation_mode: heuristic
+
+mixture:
+  strict_percentages: true
+  rebalance_if_insufficient: true
+  datasets: []
+
+filters:
+  preserve_raw_text: true
+  normalize_unicode: true
+  fix_encoding: true
+  normalize_whitespace: true
+  remove_control_chars: true
+
+output:
+  write_manifest: true
+  preferred_format: parquet

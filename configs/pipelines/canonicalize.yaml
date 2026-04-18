@@ -1,0 +1,19 @@
+pipeline:
+  name: canonicalize
+  stage: 0
+  description: >
+    Ingesta, extracción, canonización mínima, manifest y escritura a Parquet.
+
+inputs:
+  dataset_configs:
+    - configs/datasets/dgt.yaml
+    - configs/datasets/eubookshop.yaml
+    - configs/datasets/europarl.yaml
+    - configs/datasets/multiun.yaml
+    - configs/datasets/opensubtitles.yaml
+    - configs/datasets/unpc.yaml
+
+execution:
+  fail_fast: false
+  write_bronze: true
+  write_silver: true

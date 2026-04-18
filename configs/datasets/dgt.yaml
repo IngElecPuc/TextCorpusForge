@@ -1,0 +1,9 @@
+dataset:
+  name: dgt
+  enabled: true
+  input_roots: []
+  domain: legal
+  type: parallel
+  expected_languages: ["en", "es"]
+  file_patterns: []
+  notes: ""

@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "textforge"
+version = "0.1.0"
+description = "Pipeline ETL para limpieza, canonización y preparación de corpus de texto para MT, BERT y GPT."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Felipe" }]
+dependencies = [
+    "pyyaml>=6.0",
+    "pyarrow>=16.0.0",
+    "duckdb>=1.0.0",
+    "ftfy>=6.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+nlp = [
+    "datasets>=2.20.0",
+    "tokenizers>=0.19.0",
+    "transformers>=4.41.0",
+    "langdetect>=1.0.9",
+]
+quality = [
+    "lingua-language-detector>=2.0.2",
+    "cleanlab>=2.7.0",
+]
+html = [
+    "beautifulsoup4>=4.12.0",
+    "trafilatura>=1.9.0",
+]
+mt = [
+    "sentence-transformers>=3.0.0",
+]
+
+[project.scripts]
+textforge = "textforge.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

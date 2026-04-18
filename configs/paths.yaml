@@ -1,0 +1,8 @@
+paths:
+  raw_dir: data/raw
+  bronze_dir: data/bronze
+  silver_dir: data/silver
+  gold_dir: data/gold
+  tokenized_dir: data/tokenized
+  reports_dir: data/reports
+  temp_dir: data/tmp

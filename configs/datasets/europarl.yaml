@@ -1,0 +1,9 @@
+dataset:
+  name: europarl
+  enabled: true
+  input_roots: []
+  domain: parliamentary
+  type: parallel
+  expected_languages: ["en", "es"]
+  file_patterns: []
+  notes: ""

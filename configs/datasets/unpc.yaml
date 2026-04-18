@@ -1,0 +1,9 @@
+dataset:
+  name: unpc
+  enabled: true
+  input_roots: []
+  domain: institutional
+  type: parallel
+  expected_languages: ["en", "es"]
+  file_patterns: []
+  notes: ""
