@@ -9,8 +9,8 @@ EXPECTED = {
     "dgt.yaml": ("ces_alignment_xml", f"{ROOT}/DGT-2019.en-es"),
     "eubookshop.yaml": ("ids_sidecar", f"{ROOT}/EUbookshop.en-es"),
     "europarl.yaml": ("ces_alignment_xml", f"{ROOT}/Europarl.v8.en-es"),
-    "multiun.yaml": ("parallel_sidecar_plain", f"{ROOT}/MultiUN.en-es"),
-    "opensubtitles.yaml": ("parallel_sidecar_plain", f"{ROOT}/OpenSubtitles.en-es"),
+    "multiun.yaml": ("parallel_sidecar_monotonic", f"{ROOT}/MultiUN.en-es"),
+    "opensubtitles.yaml": ("parallel_sidecar_monotonic", f"{ROOT}/OpenSubtitles.en-es"),
     "unpc.yaml": ("ces_alignment_xml", f"{ROOT}/UNPC.en-es"),
 }
 

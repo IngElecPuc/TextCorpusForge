@@ -1,0 +1,3 @@
+[console_scripts]
+textforge = textforge.cli:main
+textforge-ui = textforge.ui.tkinter_app:run

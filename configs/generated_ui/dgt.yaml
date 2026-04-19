@@ -1,0 +1,21 @@
+dataset:
+  name: dgt
+  display_name: DGT-2019.en-es
+  domain: legal_institutional
+  type: parallel
+  src_lang: en
+  tgt_lang: es
+  reader: ces_alignment_xml
+  input_roots:
+  - /home/felpipe/Datasets/Textos paralelos/DGT-2019.en-es
+  relative_dir: DGT-2019.en-es
+  files:
+    src_text: DGT.en-es.en
+    tgt_text: DGT.en-es.es
+    alignment: DGT.en-es.xml
+  structural:
+    group_from_alignment_docs: true
+    provisional_pairs_allowed: false
+    expected_layout: parallel_text_plus_ces_xml
+mix:
+  percentage: 100.0

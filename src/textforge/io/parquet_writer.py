@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 
 DEFAULT_COMPRESSION = "zstd"
@@ -19,7 +19,17 @@ def write_parquet(records: Iterable[dict], output_path: str | Path) -> Path:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    rows = list(records)
+    rows = [_normalize_for_parquet(row) for row in records]
     table = pa.Table.from_pylist(rows) if rows else pa.table({})
     pq.write_table(table, output_path, compression=DEFAULT_COMPRESSION)
     return output_path
+
+
+def _normalize_for_parquet(value: Any) -> Any:
+    if isinstance(value, dict):
+        if not value:
+            return None
+        return {key: _normalize_for_parquet(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_for_parquet(item) for item in value]
+    return value
