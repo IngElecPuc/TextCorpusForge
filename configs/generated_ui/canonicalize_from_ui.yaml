@@ -13,11 +13,18 @@ user_request:
 inputs:
   dataset_configs:
   - configs/generated_ui/dgt.yaml
+  - configs/generated_ui/eubookshop.yaml
+  - configs/generated_ui/europarl.yaml
+  - configs/generated_ui/multiun.yaml
+  - configs/generated_ui/opensubtitles.yaml
+  - configs/generated_ui/unpc.yaml
 outputs:
   write_segments: true
   write_pairs: true
   write_documents: true
   write_reports: true
+  parquet_compression: zstd
+  parquet_rows_per_file: 0
 runtime:
   max_pairs: 100
   max_segments: 0
@@ -26,3 +33,11 @@ runtime:
   stop_after_first_dataset: true
   export_samples: true
   sample_export_size: 20
+  read_chunk_lines: 512
+  write_chunk_size: 1000
+paths:
+  raw: data/raw
+  bronze: data/bronze
+  silver: data/silver
+  reports: data/reports
+  tmp: data/tmp

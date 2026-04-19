@@ -16,7 +16,7 @@ def run_preview(workspace: str | Path, state: AppState) -> dict:
         raise ValueError('No hay datasets activos.')
     outputs = []
     summaries = []
-    reports_dir = workspace / 'data' / 'reports'
+    reports_dir = workspace / state.output_root / state.reports_subdir
     reports_dir.mkdir(parents=True, exist_ok=True)
     limits = {
         'max_pairs': max(1, int(state.sample_export_size or 20)),
@@ -28,7 +28,8 @@ def run_preview(workspace: str | Path, state: AppState) -> dict:
         cfg = Settings.from_yaml(workspace / 'configs' / 'datasets' / f'{selection.name}.yaml').data
         cfg['dataset']['input_roots'] = [selection.input_root]
         root = selection.input_root
-        segments, pairs, documents = build_dataset_records(cfg, root, limits=limits)
+        result = build_dataset_records(cfg, root, limits=limits)
+        segments, pairs, documents = result.segments, result.pairs, result.documents
         segments = segments[: limits['max_segments']]
         pairs = pairs[: limits['max_pairs']]
         documents = documents[: limits['max_documents']]

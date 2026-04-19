@@ -12,6 +12,7 @@ import yaml
 from textforge.orchestration.pipeline import run_pipeline
 from textforge.ui.app_state import AppState, DatasetSelection
 from textforge.ui.config_builder import build_ui_pipeline_files
+from textforge.ui.options_dialog import AdvancedOptionsDialog
 from textforge.ui.panels.datasets_panel import DatasetsPanel
 from textforge.ui.panels.pipeline_panel import PipelinePanel
 from textforge.ui.panels.preview_panel import PreviewPanel
@@ -22,8 +23,8 @@ class TextForgeApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title('TextForge - Fase 1')
-        self.geometry('1360x900')
-        self.minsize(1180, 760)
+        self.geometry('1500x980')
+        self.minsize(1280, 820)
         dataset_root = Path(r'/home/felpipe/Datasets/Textos paralelos')
         self.workspace = Path.cwd()
         self.state_obj = AppState(dataset_selections=[
@@ -50,8 +51,17 @@ class TextForgeApp(tk.Tk):
         self._job_queue: queue.Queue = queue.Queue()
         self._worker: threading.Thread | None = None
         self._cancel_event = threading.Event()
+        self._build_menu()
         self._build()
         self.after(120, self._poll_job_queue)
+
+    def _build_menu(self) -> None:
+        menu = tk.Menu(self)
+        options = tk.Menu(menu, tearoff=False)
+        options.add_command(label='Opciones avanzadas', command=self._open_advanced_options)
+        options.add_command(label='Mostrar carpeta de outputs', command=self._show_outputs_path)
+        menu.add_cascade(label='Opciones', menu=options)
+        self.config(menu=menu)
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -66,7 +76,7 @@ class TextForgeApp(tk.Tk):
         body.grid(row=1, column=0, sticky='nsew', padx=12, pady=8)
         left = ttk.Frame(body, padding=0)
         left.columnconfigure(0, weight=1)
-        left.rowconfigure(2, weight=1)
+        left.rowconfigure(1, weight=1)
         right = ttk.Frame(body, padding=0)
         right.columnconfigure(0, weight=1)
         right.rowconfigure(0, weight=1)
@@ -92,21 +102,23 @@ class TextForgeApp(tk.Tk):
         self.cancel_btn.grid(row=1, column=1, sticky='ew', padx=6, pady=6)
         self.outputs_btn = ttk.Button(actions, text='Abrir carpeta de outputs', command=self._show_outputs_path)
         self.outputs_btn.grid(row=1, column=2, sticky='ew', padx=6, pady=6)
+        self.adv_btn = ttk.Button(actions, text='Opciones avanzadas', command=self._open_advanced_options)
+        self.adv_btn.grid(row=2, column=0, sticky='ew', padx=6, pady=6)
         ttk.Button(actions, text='Salir', command=self.destroy).grid(row=2, column=2, sticky='e', padx=6, pady=6)
+
         progress_box = ttk.LabelFrame(right, text='Ejecución')
         progress_box.grid(row=0, column=0, sticky='nsew')
         progress_box.columnconfigure(0, weight=1)
-        progress_box.rowconfigure(3, weight=1)
+        progress_box.rowconfigure(2, weight=1)
         ttk.Label(progress_box, textvariable=self.status_var).grid(row=0, column=0, sticky='w', padx=8, pady=(8, 4))
         self.progress = ttk.Progressbar(progress_box, orient='horizontal', mode='determinate', maximum=100, variable=self.progress_var)
         self.progress.grid(row=1, column=0, sticky='ew', padx=8, pady=(0, 8))
-        ttk.Label(progress_box, text='Vista previa y log').grid(row=2, column=0, sticky='w', padx=8)
         self.preview_panel = PreviewPanel(progress_box)
-        self.preview_panel.grid(row=3, column=0, sticky='nsew', padx=8, pady=8)
+        self.preview_panel.grid(row=2, column=0, sticky='nsew', padx=8, pady=8)
 
     def _set_running(self, running: bool) -> None:
         state = 'disabled' if running else 'normal'
-        for btn in (self.validate_btn, self.save_btn, self.preview_btn, self.run_btn, self.outputs_btn):
+        for btn in (self.validate_btn, self.save_btn, self.preview_btn, self.run_btn, self.outputs_btn, self.adv_btn):
             btn.configure(state=state)
         self.cancel_btn.configure(state='normal' if running else 'disabled')
 
@@ -115,7 +127,34 @@ class TextForgeApp(tk.Tk):
         for item in self.state_obj.dataset_selections:
             vars_ = self.datasets_panel.vars[item.name]
             datasets.append(DatasetSelection(name=item.name, domain=item.domain, enabled=bool(vars_['enabled'].get()), input_root=str(vars_['folder'].get()).strip(), percentage=float(vars_['percentage'].get() or 0.0)))
-        return AppState(task=self.task_var.get(), target_domain=self.domain_var.get(), approximate_token_budget=int(self.token_budget_var.get() or 0), max_pairs=int(self.max_pairs_var.get() or 0), max_segments=int(self.max_segments_var.get() or 0), max_documents=int(self.max_documents_var.get() or 0), max_tokens_approx=int(self.max_tokens_var.get() or 0), sample_export_size=int(self.sample_export_size_var.get() or 20), mode_preview_only=bool(self.preview_only_var.get()), stop_after_first_dataset=bool(self.stop_after_first_var.get()), export_samples=bool(self.export_samples_var.get()), dataset_selections=datasets)
+        return AppState(
+            task=self.task_var.get(), target_domain=self.domain_var.get(), approximate_token_budget=int(self.token_budget_var.get() or 0), max_pairs=int(self.max_pairs_var.get() or 0), max_segments=int(self.max_segments_var.get() or 0), max_documents=int(self.max_documents_var.get() or 0), max_tokens_approx=int(self.max_tokens_var.get() or 0), sample_export_size=int(self.sample_export_size_var.get() or 20), mode_preview_only=bool(self.preview_only_var.get()), stop_after_first_dataset=bool(self.stop_after_first_var.get()), export_samples=bool(self.export_samples_var.get()), dataset_selections=datasets, output_root=self.state_obj.output_root, reports_subdir=self.state_obj.reports_subdir, silver_subdir=self.state_obj.silver_subdir, temp_subdir=self.state_obj.temp_subdir, read_chunk_lines=self.state_obj.read_chunk_lines, write_chunk_size=self.state_obj.write_chunk_size, parquet_compression=self.state_obj.parquet_compression, parquet_rows_per_file=self.state_obj.parquet_rows_per_file,
+        )
+
+    def _open_advanced_options(self) -> None:
+        dialog = AdvancedOptionsDialog(self, self._collect_state())
+        self.wait_window(dialog)
+        if not dialog.result:
+            return
+        self.state_obj.output_root = dialog.result['output_root'] or 'data'
+        self.state_obj.reports_subdir = dialog.result['reports_subdir'] or 'reports'
+        self.state_obj.silver_subdir = dialog.result['silver_subdir'] or 'silver'
+        self.state_obj.temp_subdir = dialog.result['temp_subdir'] or 'tmp'
+        self.state_obj.read_chunk_lines = int(dialog.result['read_chunk_lines'] or 512)
+        self.state_obj.write_chunk_size = int(dialog.result['write_chunk_size'] or 1000)
+        self.state_obj.parquet_compression = dialog.result['parquet_compression'] or 'zstd'
+        self.state_obj.parquet_rows_per_file = int(dialog.result['parquet_rows_per_file'] or 0)
+        summary = yaml.safe_dump({
+            'output_root': self.state_obj.output_root,
+            'reports_subdir': self.state_obj.reports_subdir,
+            'silver_subdir': self.state_obj.silver_subdir,
+            'temp_subdir': self.state_obj.temp_subdir,
+            'read_chunk_lines': self.state_obj.read_chunk_lines,
+            'write_chunk_size': self.state_obj.write_chunk_size,
+            'parquet_compression': self.state_obj.parquet_compression,
+            'parquet_rows_per_file': self.state_obj.parquet_rows_per_file,
+        }, allow_unicode=True, sort_keys=False)
+        self.preview_panel.update_text(summary, tab='summary')
 
     def _validate_mix(self) -> None:
         state = self._collect_state()
@@ -125,7 +164,7 @@ class TextForgeApp(tk.Tk):
         if abs(total - 100.0) > 1e-6 and active:
             preview.append('Advertencia: la mezcla no suma 100%.')
         joined = '\n'.join(preview)
-        self.preview_panel.update_text(joined)
+        self.preview_panel.update_text(joined, tab='summary')
         messagebox.showinfo('Validación', joined)
 
     def _save_preset(self) -> None:
@@ -134,7 +173,9 @@ class TextForgeApp(tk.Tk):
             'task': state.task, 'target_domain': state.target_domain, 'approximate_token_budget': state.approximate_token_budget,
             'max_pairs': state.max_pairs, 'max_segments': state.max_segments, 'max_documents': state.max_documents, 'max_tokens_approx': state.max_tokens_approx,
             'sample_export_size': state.sample_export_size, 'mode_preview_only': state.mode_preview_only, 'stop_after_first_dataset': state.stop_after_first_dataset,
-            'export_samples': state.export_samples,
+            'export_samples': state.export_samples, 'output_root': state.output_root, 'reports_subdir': state.reports_subdir, 'silver_subdir': state.silver_subdir,
+            'temp_subdir': state.temp_subdir, 'read_chunk_lines': state.read_chunk_lines, 'write_chunk_size': state.write_chunk_size,
+            'parquet_compression': state.parquet_compression, 'parquet_rows_per_file': state.parquet_rows_per_file,
             'datasets': [{'name': d.name, 'domain': d.domain, 'input_root': d.input_root, 'enabled': d.enabled, 'percentage': d.percentage} for d in state.dataset_selections],
         }
         target = filedialog.asksaveasfilename(title='Guardar preset', defaultextension='.yaml', filetypes=[('YAML', '*.yaml'), ('YML', '*.yml')])
@@ -143,7 +184,7 @@ class TextForgeApp(tk.Tk):
         path = Path(target)
         with path.open('w', encoding='utf-8') as handle:
             yaml.safe_dump(payload, handle, allow_unicode=True, sort_keys=False)
-        messagebox.showinfo('Preset guardado', f'Se guardó en:\n{path}')
+        messagebox.showinfo('Preset guardado', f'Se guardó en\n{path}')
 
     def _preview_examples(self) -> None:
         if self._worker and self._worker.is_alive():
@@ -173,14 +214,14 @@ class TextForgeApp(tk.Tk):
         self._set_running(True)
         self.status_var.set('Preparando ejecución...')
         self.progress_var.set(0)
-        self.preview_panel.update_text('Iniciando ejecución...\n')
+        self.preview_panel.update_text('Iniciando ejecución...\n', tab='log')
         def progress_callback(event: dict):
             self._job_queue.put(('progress', event))
         def work():
             try:
                 pipeline_cfg_path, dataset_cfgs = build_ui_pipeline_files(self.workspace, state)
                 result = run_pipeline('canonicalize', workspace=self.workspace, config_path=pipeline_cfg_path, progress_callback=progress_callback, cancel_event=self._cancel_event)
-                summary = {'pipeline_config': str(pipeline_cfg_path), 'dataset_configs': [str(p) for p in dataset_cfgs], 'result': result, 'outputs_dir': str(self.workspace / 'data')}
+                summary = {'pipeline_config': str(pipeline_cfg_path), 'dataset_configs': [str(p) for p in dataset_cfgs], 'result': result, 'outputs_dir': str(self.workspace / state.output_root)}
                 self._job_queue.put(('run_done', summary))
             except Exception as exc:
                 self._job_queue.put(('error', f'Error durante la generación:\n{exc}\n\n{traceback.format_exc()}'))
@@ -190,12 +231,12 @@ class TextForgeApp(tk.Tk):
     def _cancel_run(self) -> None:
         self._cancel_event.set()
         self.status_var.set('Cancelando...')
-        self.preview_panel.append_text('Se solicitó cancelación.')
+        self.preview_panel.append_text('Se solicitó cancelación.', tab='log')
 
     def _show_outputs_path(self) -> None:
-        out = self.workspace / 'data'
-        self.preview_panel.append_text(f'Outputs: {out}')
-        messagebox.showinfo('Outputs', f'Revisa la carpeta:\n{out}')
+        out = self.workspace / self.state_obj.output_root
+        self.preview_panel.append_text(f'Outputs: {out}', tab='summary')
+        messagebox.showinfo('Outputs', f'Revisa la carpeta\n{out}')
 
     def _poll_job_queue(self) -> None:
         try:
@@ -209,21 +250,21 @@ class TextForgeApp(tk.Tk):
                     message = payload.get('message', '')
                     if message:
                         self.status_var.set(message)
-                        self.preview_panel.append_text(message)
+                        self.preview_panel.append_text(message, tab='log')
                 elif kind == 'preview_done':
                     self.progress_var.set(100)
                     self.status_var.set('Previsualización finalizada.')
-                    self.preview_panel.update_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False))
+                    self.preview_panel.update_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), tab='preview')
                     self._set_running(False)
                 elif kind == 'run_done':
                     self.progress_var.set(100)
                     self.status_var.set('Generación finalizada.')
-                    self.preview_panel.update_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False))
+                    self.preview_panel.update_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), tab='preview')
                     self._set_running(False)
-                    messagebox.showinfo('Generación finalizada', f'Outputs en:\n{self.workspace / "data"}')
+                    messagebox.showinfo('Generación finalizada', f'Outputs en\n{payload["outputs_dir"]}')
                 elif kind == 'error':
                     self.status_var.set('Error.')
-                    self.preview_panel.update_text(payload)
+                    self.preview_panel.update_text(payload, tab='log')
                     self._set_running(False)
         except queue.Empty:
             pass

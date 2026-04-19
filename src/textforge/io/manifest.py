@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ class RunManifest:
     inputs: list[dict[str, Any]] = field(default_factory=list)
     outputs: list[str] = field(default_factory=list)
     stats: dict[str, Any] = field(default_factory=dict)
+    config_snapshot: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

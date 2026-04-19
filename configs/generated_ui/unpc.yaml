@@ -1,18 +1,18 @@
 dataset:
-  name: dgt
-  display_name: DGT-2019.en-es
-  domain: legal_institutional
+  name: unpc
+  display_name: UNPC.en-es
+  domain: institutional_un
   type: parallel
   src_lang: en
   tgt_lang: es
   reader: ces_alignment_xml
   input_roots:
-  - /home/felpipe/Datasets/Textos paralelos/DGT-2019.en-es
-  relative_dir: DGT-2019.en-es
+  - /home/felpipe/Datasets/Textos paralelos/UNPC.en-es
+  relative_dir: UNPC.en-es
   files:
-    src_text: DGT.en-es.en
-    tgt_text: DGT.en-es.es
-    alignment: DGT.en-es.xml
+    src_text: UNPC.en-es.en
+    tgt_text: UNPC.en-es.es
+    alignment: UNPC.en-es.xml
   structural:
     group_from_alignment_docs: true
     provisional_pairs_allowed: false

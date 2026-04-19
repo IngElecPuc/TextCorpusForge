@@ -7,7 +7,7 @@ from typing import Any, Iterable
 DEFAULT_COMPRESSION = "zstd"
 
 
-def write_parquet(records: Iterable[dict], output_path: str | Path) -> Path:
+def write_parquet(records: Iterable[dict], output_path: str | Path, compression: str = DEFAULT_COMPRESSION) -> Path:
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -21,7 +21,7 @@ def write_parquet(records: Iterable[dict], output_path: str | Path) -> Path:
 
     rows = [_normalize_for_parquet(row) for row in records]
     table = pa.Table.from_pylist(rows) if rows else pa.table({})
-    pq.write_table(table, output_path, compression=DEFAULT_COMPRESSION)
+    pq.write_table(table, output_path, compression=compression or DEFAULT_COMPRESSION)
     return output_path
 
 

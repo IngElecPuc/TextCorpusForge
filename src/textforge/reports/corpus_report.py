@@ -9,16 +9,26 @@ from textforge.schemas.parallel_pair import ParallelPairRecord
 from textforge.schemas.segment import SegmentRecord
 
 
-def write_dataset_report(dataset_name: str, segments: list[SegmentRecord], pairs: list[ParallelPairRecord], documents: list[DocumentRecord], reports_dir: str | Path, sample_size: int = 8) -> tuple[Path, Path]:
+def write_dataset_report(dataset_name: str, segments: list[SegmentRecord], pairs: list[ParallelPairRecord], documents: list[DocumentRecord], reports_dir: str | Path, sample_size: int = 8, runtime_limits: dict | None = None, generated_at_utc: str | None = None, config_relpath: str | None = None, stop_reason: str | None = None, first_limit_hit: str | None = None) -> tuple[Path, Path]:
     reports_dir = Path(reports_dir)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     by_lang: dict[str, int] = {}
     for seg in segments:
         by_lang[seg.lang] = by_lang.get(seg.lang, 0) + 1
+    estimated_tokens_src = sum(max(1, len(p.src_text_norm) // 4) for p in pairs)
+    estimated_tokens_tgt = sum(max(1, len(p.tgt_text_norm) // 4) for p in pairs)
+    estimated_tokens_total = estimated_tokens_src + estimated_tokens_tgt
+    stop_reason = stop_reason or _infer_stop_reason(runtime_limits or {}, len(pairs), len(segments), len(documents), estimated_tokens_total)
+    first_limit_hit = first_limit_hit or stop_reason
 
     report = {
         "dataset_name": dataset_name,
+        "generated_at_utc": generated_at_utc,
+        "config_path": config_relpath,
+        "runtime_limits": runtime_limits or {},
+        "stop_reason": stop_reason,
+        "first_limit_hit": first_limit_hit,
         "documents": len(documents),
         "segments": len(segments),
         "pairs": len(pairs),
@@ -28,6 +38,9 @@ def write_dataset_report(dataset_name: str, segments: list[SegmentRecord], pairs
         "pair_alignment_types": _count_values(p.alignment_type for p in pairs),
         "avg_segment_words": round(sum(s.num_words for s in segments) / max(1, len(segments)), 3),
         "avg_pair_length_ratio": round(sum(p.length_ratio for p in pairs) / max(1, len(pairs)), 3),
+        "estimated_tokens_src": estimated_tokens_src,
+        "estimated_tokens_tgt": estimated_tokens_tgt,
+        "estimated_tokens_total": estimated_tokens_total,
     }
 
     report_path = reports_dir / f"{dataset_name}_report.json"
@@ -55,3 +68,24 @@ def _count_values(values: Iterable[str]) -> dict[str, int]:
     for value in values:
         counter[value] = counter.get(value, 0) + 1
     return counter
+
+
+def _infer_stop_reason(runtime_limits: dict, pair_count: int, segment_count: int, document_count: int, estimated_tokens_total: int) -> str:
+    hits: list[str] = []
+    max_pairs = int(runtime_limits.get('max_pairs', 0) or 0)
+    max_segments = int(runtime_limits.get('max_segments', 0) or 0)
+    max_documents = int(runtime_limits.get('max_documents', 0) or 0)
+    max_tokens = int(runtime_limits.get('max_tokens_approx', 0) or 0)
+    if max_pairs > 0 and pair_count >= max_pairs:
+        hits.append('max_pairs')
+    if max_segments > 0 and segment_count >= max_segments:
+        hits.append('max_segments')
+    if max_documents > 0 and document_count >= max_documents:
+        hits.append('max_documents')
+    if max_tokens > 0 and estimated_tokens_total >= max_tokens:
+        hits.append('max_tokens_approx')
+    if not hits:
+        return 'input_exhausted'
+    if len(hits) == 1:
+        return hits[0]
+    return 'multiple_limits'

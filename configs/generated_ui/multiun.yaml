@@ -1,0 +1,26 @@
+dataset:
+  name: multiun
+  display_name: MultiUN.en-es
+  domain: institutional_un
+  type: parallel
+  src_lang: en
+  tgt_lang: es
+  reader: parallel_sidecar_monotonic
+  input_roots:
+  - /home/felpipe/Datasets/Textos paralelos/MultiUN.en-es
+  relative_dir: MultiUN.en-es
+  files:
+    src_text: MultiUN.en-es.en
+    tgt_text: MultiUN.en-es.es
+  structural:
+    group_name: multiun_default_stream
+    provisional_pairs_allowed: true
+    emit_unaligned_streams: false
+    is_dialogue: false
+    is_alignment_trusted: false
+    allow_skip: false
+    block_mode: blankline_blocks
+    alignment_strategy: multiun_monotonic_block
+    expected_layout: parallel_text_without_alignment_sidecar
+mix:
+  percentage: 17.0

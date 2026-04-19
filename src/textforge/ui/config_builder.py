@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from textforge.settings import Settings
 from textforge.ui.app_state import AppState
@@ -37,6 +36,15 @@ def build_ui_pipeline_files(workspace: str | Path, state: AppState) -> tuple[Pat
     pipeline_cfg.set('runtime.stop_after_first_dataset', bool(state.stop_after_first_dataset))
     pipeline_cfg.set('runtime.export_samples', bool(state.export_samples))
     pipeline_cfg.set('runtime.sample_export_size', int(state.sample_export_size or 20))
+    pipeline_cfg.set('runtime.read_chunk_lines', int(state.read_chunk_lines or 512))
+    pipeline_cfg.set('runtime.write_chunk_size', int(state.write_chunk_size or 1000))
+    pipeline_cfg.set('paths.raw', str(Path(state.output_root) / 'raw'))
+    pipeline_cfg.set('paths.bronze', str(Path(state.output_root) / 'bronze'))
+    pipeline_cfg.set('paths.silver', str(Path(state.output_root) / state.silver_subdir))
+    pipeline_cfg.set('paths.reports', str(Path(state.output_root) / state.reports_subdir))
+    pipeline_cfg.set('paths.tmp', str(Path(state.output_root) / state.temp_subdir))
+    pipeline_cfg.set('outputs.parquet_compression', state.parquet_compression)
+    pipeline_cfg.set('outputs.parquet_rows_per_file', int(state.parquet_rows_per_file or 0))
 
     pipeline_out = generated_dir / 'canonicalize_from_ui.yaml'
     pipeline_cfg.to_yaml(pipeline_out)

@@ -7,7 +7,9 @@ from textforge.io.builders import build_dataset_records
 from textforge.io.manifest import RunManifest, write_manifest
 from textforge.io.parquet_writer import write_parquet
 from textforge.reports.corpus_report import write_dataset_report
+from textforge.reports.discard_report import write_discard_report
 from textforge.reports.sample_exports import export_readable_samples
+from textforge.schemas.contract import SCHEMA_CONTRACT_VERSION, describe_contract
 from textforge.settings import Settings
 from textforge.utils.logging import get_logger
 from textforge.utils.paths import ensure_dir
@@ -17,12 +19,15 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 def stage1_canonicalize(config: Settings, workspace: Path, config_path: Path, progress_callback: ProgressCallback | None = None, cancel_event: Any | None = None) -> dict[str, Any]:
-    silver_dir = ensure_dir(workspace / 'data' / 'silver')
-    reports_dir = ensure_dir(workspace / 'data' / 'reports')
+    silver_dir = ensure_dir(workspace / str(config.get('paths.silver', 'data/silver')))
+    reports_dir = ensure_dir(workspace / str(config.get('paths.reports', 'data/reports')))
     ensure_dir(silver_dir / 'segments')
     ensure_dir(silver_dir / 'pairs')
     ensure_dir(silver_dir / 'documents')
-    manifest = RunManifest(pipeline_name='canonicalize', config_path=str(config_path))
+    ensure_dir(workspace / str(config.get('paths.tmp', 'data/tmp')))
+
+    compression = str(config.get('outputs.parquet_compression', 'zstd'))
+    manifest = RunManifest(pipeline_name='canonicalize', config_path=str(config_path), config_snapshot=config.data, stats={'schema_contract_version': SCHEMA_CONTRACT_VERSION})
     dataset_cfg_paths = config.get('inputs.dataset_configs', [])
     total_segments = total_pairs = total_documents = 0
     total_steps = max(len(dataset_cfg_paths), 1)
@@ -49,6 +54,7 @@ def stage1_canonicalize(config: Settings, workspace: Path, config_path: Path, pr
         all_pairs = []
         all_documents = []
         runtime_limits = {
+            'schema_contract_version': SCHEMA_CONTRACT_VERSION,
             'max_pairs': int(config.get('runtime.max_pairs', 0) or 0),
             'max_segments': int(config.get('runtime.max_segments', 0) or 0),
             'max_documents': int(config.get('runtime.max_documents', 0) or 0),
@@ -58,7 +64,8 @@ def stage1_canonicalize(config: Settings, workspace: Path, config_path: Path, pr
             if cancel_event is not None and cancel_event.is_set():
                 break
             try:
-                segments, pairs, documents = build_dataset_records(dataset_cfg, root, limits=runtime_limits)
+                result = build_dataset_records(dataset_cfg, root, limits=runtime_limits)
+                segments, pairs, documents = result.segments, result.pairs, result.documents
             except FileNotFoundError as exc:
                 logger.warning('Saltando %s en %s: %s', dataset_name, root, exc)
                 continue
@@ -72,16 +79,17 @@ def stage1_canonicalize(config: Settings, workspace: Path, config_path: Path, pr
         pair_path = silver_dir / 'pairs' / f'{dataset_name}.parquet'
         doc_path = silver_dir / 'documents' / f'{dataset_name}.parquet'
         if config.get('outputs.write_segments', True):
-            write_parquet((record.to_dict() for record in all_segments), seg_path)
+            write_parquet((record.to_dict() for record in all_segments), seg_path, compression=compression)
             manifest.outputs.append(str(seg_path))
         if config.get('outputs.write_pairs', True):
-            write_parquet((record.to_dict() for record in all_pairs), pair_path)
+            write_parquet((record.to_dict() for record in all_pairs), pair_path, compression=compression)
             manifest.outputs.append(str(pair_path))
         if config.get('outputs.write_documents', True):
-            write_parquet((record.to_dict() for record in all_documents), doc_path)
+            write_parquet((record.to_dict() for record in all_documents), doc_path, compression=compression)
             manifest.outputs.append(str(doc_path))
-        report_json, report_md = write_dataset_report(dataset_name, all_segments, all_pairs, all_documents, reports_dir, sample_size=config.get('runtime.sample_size', 8))
-        manifest.outputs.extend([str(report_json), str(report_md)])
+        report_json, report_md = write_dataset_report(dataset_name, all_segments, all_pairs, all_documents, reports_dir, sample_size=config.get('runtime.sample_size', 8), runtime_limits=runtime_limits, generated_at_utc=manifest.created_at_utc, config_relpath=str(dataset_cfg_rel), stop_reason=result.stop_reason, first_limit_hit=result.first_limit_hit)
+        discard_report = write_discard_report(dataset_name, reports_dir)
+        manifest.outputs.extend([str(report_json), str(report_md), str(discard_report)])
         if config.get('runtime.export_samples', True):
             sample_paths = export_readable_samples(dataset_name, all_segments[: config.get('runtime.sample_export_size', 20)], all_pairs[: config.get('runtime.sample_export_size', 20)], all_documents[: min(config.get('runtime.sample_export_size', 20), 10)], reports_dir)
             manifest.outputs.extend(str(p) for p in sample_paths)
@@ -92,7 +100,7 @@ def stage1_canonicalize(config: Settings, workspace: Path, config_path: Path, pr
         _emit(progress_callback, stage='dataset_done', dataset=dataset_name, message=f'{dataset_name}: segmentos={len(all_segments)} pares={len(all_pairs)} documentos={len(all_documents)}', progress=index, total=total_steps, **emitted)
         if config.get('runtime.stop_after_first_dataset', False):
             break
-    manifest.stats = {'total_segments': total_segments, 'total_pairs': total_pairs, 'total_documents': total_documents}
+    manifest.stats = {'schema_contract_version': SCHEMA_CONTRACT_VERSION, 'schema_contract': describe_contract(), 'total_segments': total_segments, 'total_pairs': total_pairs, 'total_documents': total_documents}
     manifest_path = write_manifest(manifest, reports_dir / 'canonicalize_manifest.json')
     _emit(progress_callback, stage='finished', message='Pipeline finalizado.', progress=total_steps, total=total_steps, manifest_path=str(manifest_path), **emitted)
     return {'manifest_path': str(manifest_path), **manifest.stats}

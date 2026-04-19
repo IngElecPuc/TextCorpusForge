@@ -37,3 +37,5 @@ runtime: {}
     assert cfg.get('runtime.max_pairs') == 100
     assert cfg.get('runtime.max_tokens_approx') == 1000
     assert len(dataset_paths) == 1
+    assert cfg.get('paths.silver') == 'data/silver'
+    assert cfg.get('outputs.parquet_compression') == 'zstd'

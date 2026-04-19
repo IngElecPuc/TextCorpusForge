@@ -25,4 +25,12 @@ class AppState:
     mode_preview_only: bool = False
     stop_after_first_dataset: bool = True
     export_samples: bool = True
+    output_root: str = 'data'
+    reports_subdir: str = 'reports'
+    silver_subdir: str = 'silver'
+    temp_subdir: str = 'tmp'
+    read_chunk_lines: int = 512
+    write_chunk_size: int = 1000
+    parquet_compression: str = 'zstd'
+    parquet_rows_per_file: int = 0
     dataset_selections: list[DatasetSelection] = field(default_factory=list)
