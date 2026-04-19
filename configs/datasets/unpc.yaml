@@ -1,9 +1,19 @@
 dataset:
   name: unpc
-  enabled: true
-  input_roots: []
-  domain: institutional
+  display_name: UNPC.en-es
+  domain: institutional_un
   type: parallel
-  expected_languages: ["en", "es"]
-  file_patterns: []
-  notes: ""
+  src_lang: en
+  tgt_lang: es
+  reader: ces_alignment_xml
+  input_roots:
+  - /home/felpipe/Datasets/Textos paralelos/UNPC.en-es
+  relative_dir: UNPC.en-es
+  files:
+    src_text: UNPC.en-es.en
+    tgt_text: UNPC.en-es.es
+    alignment: UNPC.en-es.xml
+  structural:
+    group_from_alignment_docs: true
+    provisional_pairs_allowed: false
+    expected_layout: parallel_text_plus_ces_xml

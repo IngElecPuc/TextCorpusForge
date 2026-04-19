@@ -1,375 +1,339 @@
-# Plan de trabajo de TextForge
+# TextForge · Plan actualizado de Fase 1
 
-## 1. Propósito general
+## 1. Punto de partida real observado en la muestra
 
-TextForge será una aplicación en Python para construir datasets limpios y trazables a partir de corpus textuales heterogéneos, con foco inmediato en:
+La muestra ya permite fijar una decisión estructural importante:
 
-- traducción automática con modelos encoder-decoder,
-- preentrenamiento BERT,
-- preentrenamiento GPT.
+- **DGT-2019**, **Europarl.v8** y **UNPC** traen archivos XML con enlaces tipo `xtargets`, es decir, alineamiento explícito por segmento.
+- **EUbookshop** trae archivo `.ids`, que también aporta alineamiento explícito o semiexplícito por identificadores laterales.
+- **MultiUN** y **OpenSubtitles** aparecen como textos bilingües laterales, pero en esta fase no hay garantía de alineamiento confiable por línea.
+- En **OpenSubtitles** el orden es claramente conversacional, con guiones, intervenciones cortas y señales de posible deriva entre lados, por lo que no conviene forzar pares todavía.
 
-Además quedará preparada para tareas futuras como clasificación, NER, QA, resumen e instruction tuning.
+### Conclusión operativa
 
-El sistema debe permitir que el usuario defina:
+La Fase 1 no debe asumir que todo corpus paralelo produce inmediatamente una tabla única de pares confiables.
+Debe producir dos salidas canónicas distintas:
 
-- presupuesto aproximado de tokens final,
-- mezcla porcentual entre datasets,
-- dominio objetivo del problema,
-- idioma o par de idiomas,
-- tarea destino,
-- reglas de filtrado y limpieza,
-- rutas de entrada mediante selección de carpetas,
-- modo de ejecución por CLI o por UI en Tkinter.
+1. `segments.parquet`: unidades atómicas ordenadas y trazables.
+2. `pairs.parquet`: solo donde existe alineamiento explícito o suficientemente confiable.
 
----
+Además debe producir una tercera tabla resumida:
 
-## 2. Requisito nuevo: presupuesto aproximado de tokens
-
-El dataset objetivo no solo se definirá por corpus de entrada y filtros, sino también por un **tamaño aproximado en tokens** fijado por el usuario.
-
-### 2.1 Implicancias
-
-Se requiere una fase de planificación antes de exportar:
-
-1. estimar el número de tokens por corpus o subcorpus,
-2. aplicar pesos porcentuales solicitados,
-3. proyectar cuántos documentos o pares deben extraerse por fuente,
-4. construir una mezcla final lo más cercana posible al presupuesto objetivo,
-5. informar desviación respecto del objetivo.
-
-### 2.2 Estrategia recomendada
-
-- mantener estadísticas por corpus: caracteres, palabras, documentos, pares y tokens estimados;
-- permitir estimación rápida con:
-  - conteo real usando tokenizer,
-  - estimación preliminar por razón caracteres/tokens;
-- seleccionar corpus por dominio y asignar cupos;
-- permitir mezcla:
-  - estricta por porcentaje,
-  - flexible con rebalanceo si un corpus no alcanza volumen suficiente.
-
-### 2.3 Ejemplo
-
-Si el usuario pide:
-
-- 120 millones de tokens,
-- tarea `gpt_pretrain`,
-- dominio objetivo `conversacional`,
-- 60% OpenSubtitles,
-- 20% Europarl,
-- 20% MultiUN,
-
-el sistema debe generar un plan de construcción aproximado, mostrar disponibilidad y advertir si alguna fuente no cubre su cuota.
+3. `documents.parquet`: grupos documentales o conversacionales con conteos y metadatos.
 
 ---
 
-## 3. Requisito nuevo: UI basada en Tkinter
+## 2. Objetivo formal de Fase 1
 
-La aplicación tendrá una interfaz local de escritorio en Tkinter para facilitar la configuración.
+Tener un pipeline reproducible que:
 
-### 3.1 Funciones mínimas de la UI
-
-- seleccionar carpetas fuente por dataset;
-- elegir tarea objetivo:
-  - seq2seq_mt,
-  - bert_pretrain,
-  - gpt_pretrain,
-  - otras futuras;
-- elegir dominio objetivo:
-  - conversacional,
-  - institucional,
-  - parlamentario,
-  - legal,
-  - mixto,
-  - personalizado;
-- fijar presupuesto aproximado de tokens;
-- fijar proporciones porcentuales entre datasets;
-- cargar o guardar presets de configuración;
-- previsualizar:
-  - volumen detectado,
-  - idiomas detectados,
-  - resumen de filtros,
-  - estimación de tokens;
-- lanzar pipeline desde la UI;
-- ver logs básicos y ruta de salida.
-
-### 3.2 Alcance inicial de la UI
-
-En la primera iteración, la UI no intentará reemplazar toda la CLI. Su objetivo será:
-
-- capturar parámetros,
-- validarlos,
-- guardarlos como YAML o JSON,
-- disparar pipelines predefinidos,
-- mostrar resultados resumidos.
+- lea corpora desde carpeta,
+- interprete formatos `txt`, `xml`, `tmx`, `tsv` e `ids`,
+- escriba una capa silver canónica en Parquet,
+- conserve el orden interno de los segmentos,
+- conserve trazabilidad suficiente para reconstruir contexto,
+- deje reportes de conteo y muestras,
+- permita configuración por UI en Tkinter y por CLI.
 
 ---
 
-## 4. Decisiones de almacenamiento
+## 3. Decisión importante: qué **no** hacer todavía
 
-La recomendación base se mantiene:
+En esta fase, **silver no llevará tokens especiales del modelo**.
 
-### 4.1 Formato principal
-**Parquet particionado** como formato principal para capas bronze/silver/gold.
+No se insertarán todavía:
 
-Razones:
+- `<bos>`
+- `<eos>`
+- `<sep>`
+- `<mask>`
+- tokens de padding
+- plantillas de prompts
 
-- acceso secuencial eficiente en SSD,
-- compresión y columnaridad,
-- buena integración con DuckDB, PyArrow y Hugging Face Datasets,
-- no depende de cargar todo en RAM.
+### Motivo
 
-### 4.2 Herramientas asociadas
+Eso pertenece a la capa **tokenized** o al exportador por tarea, no al silver canónico.
+Si se insertan demasiado temprano, se contamina el dataset con decisiones de entrenamiento que luego cuesta revertir.
 
-- **DuckDB** para inspección, QA y consultas locales sobre Parquet;
-- **PyArrow** para escritura/lectura robusta;
-- **Hugging Face Datasets** para entrenamiento y cache Arrow;
-- **memmap / bin-idx** solo en etapas finales donde convenga throughput extremo, especialmente GPT.
-
-### 4.3 Descartes de momento
-
-No usar PostgreSQL o MongoDB como backend principal de entrenamiento. Solo podrían servir más adelante para metadatos, dashboards o auditoría centralizada.
+Silver debe guardar texto limpio + estructura + trazabilidad.
 
 ---
 
-## 5. Capas de datos
+## 4. Schema canónico de Fase 1
 
-## 5.1 Raw
-Archivos originales sin alterar.
+## 4.1 Tabla `segments`
 
-## 5.2 Bronze
-Contenido extraído y estructurado mínimamente, todavía cercano al original.
+Cada fila representa un segmento atómico reutilizable.
 
-## 5.3 Silver
-Texto canonizado y filtrado con trazabilidad completa.
+Campos clave:
 
-## 5.4 Gold
-Datasets listos por tarea.
+- `dataset_name`
+- `domain`
+- `origin_path`
+- `doc_group_id`
+- `segment_id`
+- `lang`
+- `text_raw`
+- `text_norm`
+- `sequence_index`
+- `segment_key`
+- `segment_key_numeric`
+- `speaker`
+- `is_dialogue`
+- `can_concat_left`
+- `can_concat_right`
+- `casing_profile`
+- `num_chars`
+- `num_words`
+- `quality_flags`
+- `metadata`
 
-## 5.5 Tokenized
-Representaciones finales para entrenamiento.
+### Función de esta tabla
 
----
+Permite:
 
-## 6. Etapas del pipeline
+- rearmar documentos,
+- concatenar contexto largo,
+- construir BERT/GPT más adelante,
+- revisar calidad línea a línea,
+- preservar corpora aún no alineados.
 
-## Etapa 0. Ingesta, canonización mínima y planificación de mezcla
+## 4.2 Tabla `pairs`
 
-Esta etapa es la que se deja iniciada en este scaffolding.
+Cada fila representa un par alineado de entrenamiento.
 
-### Objetivos
+Campos clave:
 
-- leer corpus desde carpetas elegidas,
-- descomprimir cuando haga falta,
-- detectar estructura básica del dataset,
-- convertir a un schema común,
-- aplicar canonización mínima,
-- escribir Parquet inicial,
-- crear manifest,
-- preparar insumos para estimación de tokens y mezcla.
+- `pair_id`
+- `pair_index`
+- `doc_group_id`
+- `src_lang`
+- `tgt_lang`
+- `src_text_raw`
+- `tgt_text_raw`
+- `src_text_norm`
+- `tgt_text_norm`
+- `src_segment_keys`
+- `tgt_segment_keys`
+- `src_sequence_indices`
+- `tgt_sequence_indices`
+- `alignment_type`
+- `src_words`
+- `tgt_words`
+- `length_ratio`
+- `quality_flags`
+- `metadata`
 
-### Incluye
+### Tipos de alineamiento iniciales
 
-- lectores básicos para TXT, XML, TMX y TSV;
-- normalización Unicode;
-- reparación básica de encoding recuperable;
-- normalización de espacios y saltos;
-- eliminación de caracteres de control;
-- manifest JSON por corrida;
-- escritura a Parquet;
-- CLI mínima;
-- UI mínima en Tkinter.
+- `ces_explicit`
+- `ids_explicit`
+- `tmx_explicit`
+- `tsv_explicit`
 
-### Entregables
+## 4.3 Tabla `documents`
 
-- `bronze/` y `silver/` iniciales,
-- manifest con metadatos,
-- reporte básico de conteos,
-- configuración reproducible guardada.
+Cada fila resume un grupo documental o conversacional.
 
----
+Campos clave:
 
-## Etapa 1. Filtros baratos y trazables
-
-- longitud mínima y máxima,
-- ratio alfabético,
-- proporción de mayúsculas,
-- líneas sin puntuación final,
-- patrones basura al inicio,
-- pares idénticos,
-- ratio de longitud source/target,
-- confirmación de idioma.
-
----
-
-## Etapa 2. Deduplicación
-
-- deduplicación exacta,
-- MinHash / LSH,
-- deduplicación por n-gramas frecuentes,
-- opciones semánticas en tareas seleccionadas.
-
----
-
-## Etapa 3. Scoring de calidad
-
-- perplejidad con modelo pequeño o KenLM,
-- score semántico de alineación para MT,
-- score de calidad agregado,
-- descarte por umbrales configurables.
-
----
-
-## Etapa 4. Decontamination
-
-- hash exacto contra evaluation sets,
-- overlap de n-gramas,
-- similitud difusa contra benchmarks reservados.
+- `document_id`
+- `doc_group_id`
+- `src_lang`
+- `tgt_lang`
+- `is_parallel`
+- `segment_count_src`
+- `segment_count_tgt`
+- `pair_count`
+- `total_chars_src`
+- `total_chars_tgt`
+- `total_words_src`
+- `total_words_tgt`
 
 ---
 
-## Etapa 5. Exportadores por tarea
+## 5. Criterio de agrupación para contexto largo
 
-- seq2seq_mt,
-- bert_pretrain,
-- gpt_pretrain,
-- clasificación,
-- NER,
-- QA,
-- summarization,
-- instruction tuning.
+El proyecto necesita columnas que permitan concatenar texto después, pero sin mezclar material que no debería tocarse.
 
----
+### Regla general
 
-## Etapa 6. Tokenización y packing
+La concatenación futura debe ocurrir **solo dentro de un mismo `doc_group_id`**.
 
-- entrenamiento de tokenizer,
-- tokenización por lotes,
-- packing GPT,
-- collator dinámico para BERT,
-- exportación Arrow,
-- exportación memmap.
+### Por dataset
+
+- **DGT / Europarl / UNPC**: `doc_group_id` se deriva de los nombres `fromDoc` y `toDoc` del alineamiento XML.
+- **EUbookshop**: `doc_group_id` se deriva de las rutas laterales del `.ids`.
+- **MultiUN**: por ahora se conserva como stream bilingüe por archivo o por raíz, sin pares forzados.
+- **OpenSubtitles**: se conserva como stream segmentado de diálogo; por defecto `can_concat_left/right = false` para evitar unir parlamentos de forma agresiva.
 
 ---
 
-## 7. Reglas por tipo de tarea
+## 6. Decisiones de limpieza mínima en Fase 1
 
-## 7.1 MT
-- detección de idioma en ambos lados,
-- ratio de longitud,
-- pares idénticos,
-- score de alineación,
-- eliminación de malos alineamientos.
+La normalización de esta etapa será deliberadamente conservadora.
 
-## 7.2 BERT / GPT
-- deduplicación agresiva,
-- mezcla por dominio,
-- filtro por perplejidad,
-- manejo de documentos cortos según objetivo,
-- control de diversidad por fuente.
+### Sí se hace
 
-## 7.3 Clasificación
-- limpieza de etiquetas,
-- stratified splitting,
-- truncado consistente,
-- balanceo o weighting.
+- normalización Unicode (`NFC`)
+- reparación de encoding recuperable (`ftfy`, si está disponible)
+- normalización de espacios y `NBSP`
+- eliminación de caracteres de control
+- trimming externo
 
-## 7.4 NER
-- validación BIO/BIOES,
-- no cortar entidades al fragmentar,
-- manejo explícito de solapamientos.
+### No se hace todavía
 
-## 7.5 QA
-- verificación de answer span,
-- deduplicación de preguntas similares,
-- normalización de respuestas.
+- lowercasing global
+- remoción agresiva de signos especiales
+- eliminación de marcadores protocolarios tipo `<< >>`
+- deduplicación
+- filtrado por perplejidad
+- detección de idioma
+- alineación automática compleja
 
-## 7.6 Summarization
-- ratio de compresión,
-- cobertura extractiva,
-- descarte de documentos truncados.
+### Nota sobre mayúsculas
 
-## 7.7 Instruction tuning
-- verificación de formato,
-- eliminación de respuestas evasivas,
-- quality scoring con modelo juez en una etapa posterior.
+No se alterará el casing en silver.
+En cambio, se guarda un `casing_profile` para permitir decisiones posteriores.
 
 ---
 
-## 8. Diseño de mezcla por dominios
+## 7. Tratamiento por corpus en Fase 1
 
-El usuario podrá elegir un dominio objetivo. El sistema traducirá eso a una política de mezcla.
+## 7.1 DGT-2019.en-es
 
-### Ejemplo de dominios
+- reader: `ces_alignment_xml`
+- entradas: `.en`, `.es`, `.xml`
+- salida: segmentos + pares explícitos + resumen documental
 
-- `conversational`
-  - prioriza OpenSubtitles;
-- `institutional`
-  - prioriza DGT, MultiUN, UNPC, EUbookshop;
-- `parliamentary`
-  - prioriza Europarl;
-- `mixed`
-  - mezcla configurable;
-- `custom`
-  - control total por porcentaje.
+## 7.2 Europarl.v8.en-es
 
-### Restricciones
+- reader: `ces_alignment_xml`
+- entradas: `.en`, `.es`, `.xml`
+- el XML contiene 1:1 y también 1:n o n:1
+- salida: segmentos + pares explícitos
 
-- la suma de porcentajes debe ser 100%;
-- si no hay suficiente volumen, el sistema debe:
-  - advertir,
-  - proponer rebalanceo,
-  - o rellenar con fuentes compatibles.
+## 7.3 UNPC.en-es
 
----
+- reader: `ces_alignment_xml`
+- el XML usa claves del tipo `1:1;1:1`
+- esas claves se preservan en `segment_key`
+- salida: segmentos + pares explícitos
 
-## 9. Árbol base del proyecto
+## 7.4 EUbookshop.en-es
 
-El árbol incluido en este scaffolding contempla:
+- reader: `ids_sidecar`
+- entradas: `.en`, `.es`, `.ids`
+- se preservan claves como `s4.1`, `s46.1 s46.2`, etc.
+- salida: segmentos + pares explícitos
 
-- package principal `textforge`,
-- UI Tkinter,
-- configs por corpus y pipeline,
-- módulos de normalización, filtros, dedup y exportación,
-- scripts utilitarios,
-- docs y tests.
+## 7.5 MultiUN.en-es
 
----
+- reader: `parallel_sidecar_plain`
+- en esta fase no se asume alineamiento confiable por línea
+- salida: streams segmentados bilingües sin tabla de pares confiables
 
-## 10. Archivos no vacíos en esta entrega
+## 7.6 OpenSubtitles.en-es
 
-Esta entrega incluye contenido en:
-
-- `docs/PROJECT_PLAN.md`,
-- archivos de la etapa 0,
-- archivos mínimos de arranque del proyecto.
-
-El resto queda como marcador estructural para desarrollos posteriores.
+- reader: `parallel_sidecar_plain`
+- se marca como `is_dialogue = true`
+- no se generan pares confiables en esta fase
+- salida: streams segmentados con trazabilidad conversacional
 
 ---
 
-## 11. Prioridad de implementación real
+## 8. Reportes de Fase 1
 
-Orden recomendado de trabajo a partir de este scaffolding:
+Cada dataset deja:
 
-1. adaptar lectores a la estructura real de DGT, EUbookshop, Europarl, MultiUN, OpenSubtitles y UNPC;
-2. cerrar schema canónico de documentos y pares paralelos;
-3. consolidar estimación de tokens y mezcla por porcentajes;
-4. ampliar UI para validación y presets;
-5. ejecutar primeras corridas pequeñas de ingesta;
-6. recién después, endurecer filtros, dedup y scoring.
+- `*_report.json`
+- `*_samples.md`
+
+Los reportes incluyen:
+
+- cantidad de documentos
+- cantidad de segmentos
+- cantidad de pares
+- segmentos por idioma
+- segmentos vacíos tras normalización
+- media de palabras por segmento
+- media de ratio de longitud por par
+- distribución por tipo de alineamiento
 
 ---
 
-## 12. Criterios de éxito de la siguiente iteración
+## 9. UI de Tkinter en esta fase
 
-La siguiente iteración debería dejar resuelto:
+La UI queda enfocada a configuración y exportación de presets.
 
-- lectura real de tus datasets,
-- escritura consistente de Parquet,
-- manifest confiable,
-- mezcla simple por porcentajes,
-- estimación de tokens razonable,
-- UI capaz de lanzar la etapa 0.
+### Debe permitir
 
-Con eso, el proyecto ya pasa de ser una idea a una base operable.
+- elegir tarea destino (`seq2seq_mt`, `bert_pretrain`, `gpt_pretrain`)
+- elegir dominio objetivo
+- fijar presupuesto aproximado de tokens
+- activar o desactivar datasets
+- seleccionar carpeta por dataset
+- fijar porcentaje de mezcla por dataset
+- validar que la mezcla sume 100%
+- exportar preset YAML
+- exportar overrides de datasets
+
+### No hace todavía
+
+- no ejecuta alineación automática compleja
+- no visualiza Parquet internamente
+- no lanza entrenamiento
+
+---
+
+## 10. Entregables concretos de esta iteración
+
+### Código no vacío para Fase 1
+
+- readers base para `txt`, `xml`, `tmx`, `tsv`, `ids`
+- builders por tipo de corpus
+- schema canónico `segments / pairs / documents`
+- normalización mínima
+- manifest y reportes
+- pipeline `canonicalize`
+- UI Tkinter actualizada
+- configs por corpus
+
+### Artefacto esperado
+
+Un ZIP con scaffold actualizado y listo para adaptar cuando llegue el `.txt` más detallado de estructura real.
+
+---
+
+## 11. Siguiente paso después de esta fase
+
+Cuando llegue la descripción completa de la estructura real de carpetas y archivos, habrá que ajustar:
+
+- resolución exacta de paths,
+- segmentación documental por corpus,
+- heurísticas de agrupación,
+- si MultiUN admite alineación lineal usable o no,
+- cómo detectar y tratar la deriva en OpenSubtitles,
+- si conviene una tabla adicional `alignment_candidates` para la fase automática.
+
+## Addendum: layout confirmado del input
+
+La estructura física confirmada para la primera tanda de corpora es:
+
+```text
+/home/felpipe/Datasets/Textos paralelos/
+├── DGT-2019.en-es/
+├── EUbookshop.en-es/
+├── Europarl.v8.en-es/
+├── MultiUN.en-es/
+├── OpenSubtitles.en-es/
+└── UNPC.en-es/
+```
+
+Decisiones activas del scaffold regenerado:
+
+- DGT, Europarl y UNPC se procesan con reader `ces_alignment_xml`.
+- EUbookshop se procesa con reader `ids_sidecar`.
+- MultiUN y OpenSubtitles se preservan en Fase 1 como streams bilingües ordenados, sin forzar pares en `pairs.parquet`.
+- OpenSubtitles se marca como corpus dialogal para bloquear concatenación ciega entre turnos.
+- Todas las configs de dataset ya incluyen `input_roots` apuntando al layout confirmado.

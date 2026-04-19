@@ -1,8 +1,15 @@
 pipeline:
   name: canonicalize
-  stage: 0
+  phase: 1
   description: >
-    Ingesta, extracción, canonización mínima, manifest y escritura a Parquet.
+    Lectura reproducible de corpora, normalización mínima, escritura silver en Parquet
+    y reportes estructurales.
+
+user_request:
+  approximate_token_budget: 0
+  target_task: seq2seq_mt
+  target_domain: mixed
+  dataset_mix: {}
 
 inputs:
   dataset_configs:
@@ -13,7 +20,8 @@ inputs:
     - configs/datasets/opensubtitles.yaml
     - configs/datasets/unpc.yaml
 
-execution:
-  fail_fast: false
-  write_bronze: true
-  write_silver: true
+outputs:
+  write_segments: true
+  write_pairs: true
+  write_documents: true
+  write_reports: true

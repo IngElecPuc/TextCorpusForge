@@ -1,9 +1,19 @@
 dataset:
   name: europarl
-  enabled: true
-  input_roots: []
+  display_name: Europarl.v8.en-es
   domain: parliamentary
   type: parallel
-  expected_languages: ["en", "es"]
-  file_patterns: []
-  notes: ""
+  src_lang: en
+  tgt_lang: es
+  reader: ces_alignment_xml
+  input_roots:
+  - /home/felpipe/Datasets/Textos paralelos/Europarl.v8.en-es
+  relative_dir: Europarl.v8.en-es
+  files:
+    src_text: Europarl.v8.en-es.en
+    tgt_text: Europarl.v8.en-es.es
+    alignment: Europarl.v8.en-es.xml
+  structural:
+    group_from_alignment_docs: true
+    provisional_pairs_allowed: false
+    expected_layout: parallel_text_plus_ces_xml

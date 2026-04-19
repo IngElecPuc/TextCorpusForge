@@ -3,79 +3,91 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from textforge.io.builders import build_dataset_records
 from textforge.io.manifest import RunManifest, write_manifest
 from textforge.io.parquet_writer import write_parquet
-from textforge.io.readers_tmx import iter_tmx_parallel
-from textforge.io.readers_tsv import iter_tsv_parallel
-from textforge.io.readers_txt import iter_txt_documents
-from textforge.io.readers_xml import iter_xml_documents
+from textforge.reports.corpus_report import write_dataset_report
 from textforge.settings import Settings
+from textforge.utils.logging import get_logger
+from textforge.utils.paths import ensure_dir
 
 
-def stage0_canonicalize(config: Settings, workspace: Path) -> dict[str, Any]:
-    dataset_paths = [
-        Path(p)
-        for p in config.get("inputs.dataset_configs", [])
-    ]
+logger = get_logger(__name__)
 
-    bronze_out = workspace / "data" / "bronze"
-    silver_out = workspace / "data" / "silver"
-    reports_out = workspace / "data" / "reports"
-    reports_out.mkdir(parents=True, exist_ok=True)
 
-    manifest = RunManifest(
-        pipeline_name="canonicalize",
-        config_path=str(workspace / "configs" / "pipelines" / "canonicalize.yaml"),
-    )
+def stage1_canonicalize(config: Settings, workspace: Path, config_path: Path) -> dict[str, Any]:
+    silver_dir = ensure_dir(workspace / 'data' / 'silver')
+    reports_dir = ensure_dir(workspace / 'data' / 'reports')
+    ensure_dir(silver_dir / 'segments')
+    ensure_dir(silver_dir / 'pairs')
+    ensure_dir(silver_dir / 'documents')
 
-    total_docs = 0
+    manifest = RunManifest(pipeline_name='canonicalize', config_path=str(config_path))
+
+    dataset_cfg_paths = config.get('inputs.dataset_configs', [])
+    total_segments = 0
     total_pairs = 0
+    total_documents = 0
 
-    for dataset_cfg_path in dataset_paths:
-        dataset_cfg = Settings.from_yaml(workspace / dataset_cfg_path)
-        name = dataset_cfg.get("dataset.name", dataset_cfg_path.stem)
-        roots = dataset_cfg.get("dataset.input_roots", [])
-        domain = dataset_cfg.get("dataset.domain", "unknown")
-        dtype = dataset_cfg.get("dataset.type", "document")
-        langs = dataset_cfg.get("dataset.expected_languages", [])
-
-        manifest.inputs.append({
-            "dataset": name,
-            "roots": roots,
-            "domain": domain,
-            "type": dtype,
-            "expected_languages": langs,
-        })
-
+    for dataset_cfg_rel in dataset_cfg_paths:
+        dataset_cfg_path = workspace / dataset_cfg_rel
+        dataset_cfg = Settings.from_yaml(dataset_cfg_path).data
+        dataset_name = dataset_cfg['dataset']['name']
+        roots = dataset_cfg['dataset'].get('input_roots', [])
         if not roots:
+            relative_dir = dataset_cfg['dataset'].get('relative_dir')
+            default_root = config.get('paths.datasets_root_default')
+            if relative_dir and default_root:
+                roots = [str(Path(default_root) / relative_dir)]
+
+        manifest.inputs.append({'dataset': dataset_name, 'config_path': str(dataset_cfg_path), 'roots': roots})
+        if not roots:
+            logger.info('Saltando %s: no tiene input_roots configurado todavía.', dataset_name)
             continue
 
-        for root in roots:
-            root_path = workspace / root if not Path(root).is_absolute() else Path(root)
+        all_segments = []
+        all_pairs = []
+        all_documents = []
 
-            if dtype == "parallel":
-                pair_records = list(iter_tmx_parallel(root_path, name, domain, langs[0], langs[1]))
-                if not pair_records:
-                    pair_records = list(iter_tsv_parallel(root_path, name, domain, langs[0], langs[1]))
-                if pair_records:
-                    out_path = silver_out / "pairs" / f"{name}.parquet"
-                    write_parquet((r.to_dict() for r in pair_records), out_path)
-                    manifest.outputs.append(str(out_path))
-                    total_pairs += len(pair_records)
-            else:
-                doc_records = list(iter_txt_documents(root_path, name, domain, langs[0] if langs else ""))
-                if not doc_records:
-                    doc_records = list(iter_xml_documents(root_path, name, domain, langs[0] if langs else ""))
-                if doc_records:
-                    out_path = silver_out / "docs" / f"{name}.parquet"
-                    write_parquet((r.to_dict() for r in doc_records), out_path)
-                    manifest.outputs.append(str(out_path))
-                    total_docs += len(doc_records)
+        for root in roots:
+            try:
+                segments, pairs, documents = build_dataset_records(dataset_cfg, root)
+            except FileNotFoundError as exc:
+                logger.warning('Saltando %s en %s: %s', dataset_name, root, exc)
+                continue
+            all_segments.extend(segments)
+            all_pairs.extend(pairs)
+            all_documents.extend(documents)
+
+        if not all_segments and not all_pairs and not all_documents:
+            continue
+
+        seg_path = silver_dir / 'segments' / f'{dataset_name}.parquet'
+        pair_path = silver_dir / 'pairs' / f'{dataset_name}.parquet'
+        doc_path = silver_dir / 'documents' / f'{dataset_name}.parquet'
+
+        if config.get('outputs.write_segments', True):
+            write_parquet((record.to_dict() for record in all_segments), seg_path)
+            manifest.outputs.append(str(seg_path))
+        if config.get('outputs.write_pairs', True):
+            write_parquet((record.to_dict() for record in all_pairs), pair_path)
+            manifest.outputs.append(str(pair_path))
+        if config.get('outputs.write_documents', True):
+            write_parquet((record.to_dict() for record in all_documents), doc_path)
+            manifest.outputs.append(str(doc_path))
+
+        report_json, report_md = write_dataset_report(dataset_name, all_segments, all_pairs, all_documents, reports_dir, sample_size=config.get('runtime.sample_size', 8))
+        manifest.outputs.extend([str(report_json), str(report_md)])
+
+        total_segments += len(all_segments)
+        total_pairs += len(all_pairs)
+        total_documents += len(all_documents)
+        logger.info('Dataset %s -> segmentos=%s pares=%s documentos=%s', dataset_name, len(all_segments), len(all_pairs), len(all_documents))
 
     manifest.stats = {
-        "total_documents": total_docs,
-        "total_parallel_pairs": total_pairs,
+        'total_segments': total_segments,
+        'total_pairs': total_pairs,
+        'total_documents': total_documents,
     }
-    manifest_path = reports_out / "canonicalize_manifest.json"
-    write_manifest(manifest, manifest_path)
-    return manifest.to_dict()
+    manifest_path = write_manifest(manifest, reports_dir / 'canonicalize_manifest.json')
+    return {'manifest_path': str(manifest_path), **manifest.stats}

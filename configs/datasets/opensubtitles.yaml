@@ -1,9 +1,21 @@
 dataset:
   name: opensubtitles
-  enabled: true
-  input_roots: []
-  domain: conversational
+  display_name: OpenSubtitles.en-es
+  domain: conversational_subtitles
   type: parallel
-  expected_languages: ["en", "es"]
-  file_patterns: []
-  notes: ""
+  src_lang: en
+  tgt_lang: es
+  reader: parallel_sidecar_plain
+  input_roots:
+  - /home/felpipe/Datasets/Textos paralelos/OpenSubtitles.en-es
+  relative_dir: OpenSubtitles.en-es
+  files:
+    src_text: OpenSubtitles.en-es.en
+    tgt_text: OpenSubtitles.en-es.es
+  structural:
+    group_name: opensubtitles_default_stream
+    provisional_pairs_allowed: false
+    emit_unaligned_streams: true
+    is_dialogue: true
+    is_alignment_trusted: false
+    expected_layout: subtitle_stream_without_alignment_sidecar

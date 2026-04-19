@@ -1,8 +1,8 @@
 paths:
-  raw_dir: data/raw
-  bronze_dir: data/bronze
-  silver_dir: data/silver
-  gold_dir: data/gold
-  tokenized_dir: data/tokenized
-  reports_dir: data/reports
-  temp_dir: data/tmp
+  raw: data/raw
+  bronze: data/bronze
+  silver: data/silver
+  reports: data/reports
+  tokenized: data/tokenized
+  datasets_root_default: /home/felpipe/Datasets/Textos paralelos
+  datasets_tree_note: Layout confirmado por structure.txt del usuario.

@@ -1,32 +1,33 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterator
 from xml.etree import ElementTree as ET
 
-from textforge.io.readers_txt import canonicalize_text
-from textforge.schemas.document import DocumentRecord
-from textforge.utils.hashing import stable_hash
 
+def parse_ces_alignment(path: str | Path) -> list[dict]:
+    path = Path(path)
+    tree = ET.parse(path)
+    root = tree.getroot()
+    alignments: list[dict] = []
 
-def iter_xml_documents(root: str | Path, source: str, domain: str, lang: str = "") -> Iterator[DocumentRecord]:
-    root = Path(root)
-    for path in root.rglob("*.xml"):
-        try:
-            tree = ET.parse(path)
-            raw = " ".join(elem.text.strip() for elem in tree.iter() if elem.text and elem.text.strip())
-        except ET.ParseError:
-            continue
-
-        norm = canonicalize_text(raw)
-        yield DocumentRecord(
-            doc_id=stable_hash(f"{source}:{path}"),
-            source=source,
-            domain=domain,
-            origin_path=str(path),
-            lang=lang,
-            text_raw=raw,
-            text_norm=norm,
-            num_chars=len(norm),
-            num_words=len(norm.split()),
-        )
+    for group_idx, link_group in enumerate(root.findall('.//linkGrp')):
+        from_doc = link_group.attrib.get('fromDoc', '')
+        to_doc = link_group.attrib.get('toDoc', '')
+        for pair_idx, link in enumerate(link_group.findall('./link')):
+            xtargets = link.attrib.get('xtargets', '')
+            if ';' not in xtargets:
+                continue
+            src_part, tgt_part = xtargets.split(';', maxsplit=1)
+            src_keys = [tok for tok in src_part.strip().split() if tok]
+            tgt_keys = [tok for tok in tgt_part.strip().split() if tok]
+            alignments.append(
+                {
+                    'group_index': group_idx,
+                    'pair_index': pair_idx,
+                    'from_doc': from_doc,
+                    'to_doc': to_doc,
+                    'src_keys': src_keys,
+                    'tgt_keys': tgt_keys,
+                }
+            )
+    return alignments

@@ -1,116 +1,70 @@
 from __future__ import annotations
 
-import tkinter as tk
 from pathlib import Path
+import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import yaml
 
 from textforge.ui.app_state import AppState, DatasetSelection
-
-
-_DATASETS = [
-    ("dgt", "legal"),
-    ("eubookshop", "institutional"),
-    ("europarl", "parliamentary"),
-    ("multiun", "institutional"),
-    ("opensubtitles", "conversational"),
-    ("unpc", "institutional"),
-]
+from textforge.ui.panels.datasets_panel import DatasetsPanel
+from textforge.ui.panels.pipeline_panel import PipelinePanel
+from textforge.ui.panels.preview_panel import PreviewPanel
 
 
 class TextForgeApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("TextForge")
-        self.geometry("980x620")
-        self.state = AppState(
+        self.title("TextForge - Fase 1")
+        self.geometry("1080x720")
+
+        dataset_root = Path(r"/home/felpipe/Datasets/Textos paralelos")
+        self.state_obj = AppState(
             dataset_selections=[
-                DatasetSelection(name=name, domain=domain)
-                for name, domain in _DATASETS
+                DatasetSelection(name="dgt", domain="legal_institutional", input_root=str(dataset_root / "DGT-2019.en-es"), enabled=True, percentage=20.0),
+                DatasetSelection(name="eubookshop", domain="institutional_publications", input_root=str(dataset_root / "EUbookshop.en-es"), enabled=True, percentage=10.0),
+                DatasetSelection(name="europarl", domain="parliamentary", input_root=str(dataset_root / "Europarl.v8.en-es"), enabled=True, percentage=15.0),
+                DatasetSelection(name="multiun", domain="institutional_un", input_root=str(dataset_root / "MultiUN.en-es"), enabled=True, percentage=20.0),
+                DatasetSelection(name="opensubtitles", domain="conversational_subtitles", input_root=str(dataset_root / "OpenSubtitles.en-es"), enabled=True, percentage=20.0),
+                DatasetSelection(name="unpc", domain="institutional_un", input_root=str(dataset_root / "UNPC.en-es"), enabled=True, percentage=15.0),
             ]
         )
-        self._dataset_vars: dict[str, dict[str, tk.Variable]] = {}
+
+        self.task_var = tk.StringVar(value=self.state_obj.task)
+        self.domain_var = tk.StringVar(value=self.state_obj.target_domain)
+        self.token_budget_var = tk.StringVar(value=str(self.state_obj.approximate_token_budget))
+
         self._build()
 
     def _build(self) -> None:
-        root = ttk.Frame(self, padding=12)
-        root.pack(fill="both", expand=True)
+        header = ttk.Frame(self, padding=12)
+        header.pack(fill="x")
+        ttk.Label(header, text="TextForge · configurador de Fase 1", font=("TkDefaultFont", 14, "bold")).pack(anchor="w")
+        ttk.Label(
+            header,
+            text="Genera presets reproducibles para lectura, canonización y silver Parquet sobre el layout confirmado.",
+        ).pack(anchor="w")
 
-        top = ttk.LabelFrame(root, text="Objetivo del dataset", padding=12)
-        top.pack(fill="x", padx=4, pady=4)
+        pipeline_panel = PipelinePanel(self, self.task_var, self.domain_var, self.token_budget_var)
+        pipeline_panel.pack(fill="x", padx=12, pady=8)
 
-        self.task_var = tk.StringVar(value=self.state.task)
-        self.domain_var = tk.StringVar(value=self.state.target_domain)
-        self.token_budget_var = tk.StringVar(value=str(self.state.approximate_token_budget))
+        self.datasets_panel = DatasetsPanel(self, self.state_obj)
+        self.datasets_panel.pack(fill="both", expand=True, padx=12, pady=8)
 
-        ttk.Label(top, text="Tarea").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(
-            top,
-            textvariable=self.task_var,
-            values=["seq2seq_mt", "bert_pretrain", "gpt_pretrain", "classification", "ner", "qa", "summarization"],
-            state="readonly",
-            width=22,
-        ).grid(row=0, column=1, sticky="w", padx=8)
+        self.preview_panel = PreviewPanel(self)
+        self.preview_panel.pack(fill="x", padx=12, pady=8)
 
-        ttk.Label(top, text="Dominio objetivo").grid(row=0, column=2, sticky="w")
-        ttk.Combobox(
-            top,
-            textvariable=self.domain_var,
-            values=["mixed", "conversational", "institutional", "parliamentary", "legal", "custom"],
-            state="readonly",
-            width=22,
-        ).grid(row=0, column=3, sticky="w", padx=8)
-
-        ttk.Label(top, text="Tokens aprox.").grid(row=0, column=4, sticky="w")
-        ttk.Entry(top, textvariable=self.token_budget_var, width=16).grid(row=0, column=5, sticky="w", padx=8)
-
-        datasets_frame = ttk.LabelFrame(root, text="Datasets y mezcla", padding=12)
-        datasets_frame.pack(fill="both", expand=True, padx=4, pady=4)
-
-        headers = ["Usar", "Dataset", "Dominio", "Carpeta", "% mezcla", "Acción"]
-        for col, title in enumerate(headers):
-            ttk.Label(datasets_frame, text=title).grid(row=0, column=col, sticky="w", padx=4, pady=4)
-
-        for idx, item in enumerate(self.state.dataset_selections, start=1):
-            enabled = tk.BooleanVar(value=item.enabled)
-            folder = tk.StringVar(value=item.input_root)
-            percentage = tk.StringVar(value=str(item.percentage))
-
-            self._dataset_vars[item.name] = {
-                "enabled": enabled,
-                "folder": folder,
-                "percentage": percentage,
-            }
-
-            ttk.Checkbutton(datasets_frame, variable=enabled).grid(row=idx, column=0, sticky="w")
-            ttk.Label(datasets_frame, text=item.name).grid(row=idx, column=1, sticky="w", padx=4)
-            ttk.Label(datasets_frame, text=item.domain).grid(row=idx, column=2, sticky="w", padx=4)
-            ttk.Entry(datasets_frame, textvariable=folder, width=50).grid(row=idx, column=3, sticky="we", padx=4)
-            ttk.Entry(datasets_frame, textvariable=percentage, width=10).grid(row=idx, column=4, sticky="w", padx=4)
-            ttk.Button(
-                datasets_frame,
-                text="Seleccionar",
-                command=lambda name=item.name: self._pick_folder(name),
-            ).grid(row=idx, column=5, sticky="w", padx=4)
-
-        actions = ttk.Frame(root, padding=(0, 8, 0, 0))
+        actions = ttk.Frame(self, padding=12)
         actions.pack(fill="x")
-
-        ttk.Button(actions, text="Guardar preset YAML", command=self._save_preset).pack(side="left")
-        ttk.Button(actions, text="Validar mezcla", command=self._validate_mix).pack(side="left", padx=8)
+        ttk.Button(actions, text="Validar mezcla", command=self._validate_mix).pack(side="left")
+        ttk.Button(actions, text="Guardar preset YAML", command=self._save_preset).pack(side="left", padx=8)
+        ttk.Button(actions, text="Exportar configs de datasets", command=self._export_dataset_overrides).pack(side="left", padx=8)
         ttk.Button(actions, text="Salir", command=self.destroy).pack(side="right")
-
-    def _pick_folder(self, dataset_name: str) -> None:
-        selected = filedialog.askdirectory(title=f"Selecciona carpeta para {dataset_name}")
-        if selected:
-            self._dataset_vars[dataset_name]["folder"].set(selected)
-            self._dataset_vars[dataset_name]["enabled"].set(True)
 
     def _collect_state(self) -> dict:
         datasets = []
-        for item in self.state.dataset_selections:
-            vars_ = self._dataset_vars[item.name]
+        for item in self.state_obj.dataset_selections:
+            vars_ = self.datasets_panel.vars[item.name]
             datasets.append(
                 {
                     "name": item.name,
@@ -120,7 +74,6 @@ class TextForgeApp(tk.Tk):
                     "percentage": float(vars_["percentage"].get() or 0.0),
                 }
             )
-
         return {
             "task": self.task_var.get(),
             "target_domain": self.domain_var.get(),
@@ -132,10 +85,11 @@ class TextForgeApp(tk.Tk):
         state = self._collect_state()
         active = [d for d in state["datasets"] if d["enabled"]]
         total = sum(d["percentage"] for d in active)
-        messagebox.showinfo(
-            "Validación",
-            f"Datasets activos: {len(active)}\nSuma porcentual: {total:.2f}%",
-        )
+        preview = [f"Activos: {len(active)}", f"Suma porcentual: {total:.2f}%"]
+        if abs(total - 100.0) > 1e-6 and active:
+            preview.append("Advertencia: la mezcla no suma 100%.")
+        self.preview_panel.update_text(" | ".join(preview))
+        messagebox.showinfo("Validación", "\n".join(preview))
 
     def _save_preset(self) -> None:
         state = self._collect_state()
@@ -146,12 +100,36 @@ class TextForgeApp(tk.Tk):
         )
         if not target:
             return
-
         path = Path(target)
         with path.open("w", encoding="utf-8") as handle:
             yaml.safe_dump(state, handle, allow_unicode=True, sort_keys=False)
-
         messagebox.showinfo("Preset guardado", f"Se guardó en:\n{path}")
+
+    def _export_dataset_overrides(self) -> None:
+        state = self._collect_state()
+        target_dir = filedialog.askdirectory(title="Selecciona carpeta para exportar overrides")
+        if not target_dir:
+            return
+        target_dir = Path(target_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for item in state["datasets"]:
+            if not item["enabled"]:
+                continue
+            out = target_dir / f"{item['name']}.override.yaml"
+            with out.open("w", encoding="utf-8") as handle:
+                yaml.safe_dump(
+                    {
+                        "dataset": {
+                            "input_roots": [item["input_root"]],
+                            "domain": item["domain"],
+                        },
+                        "mix": {"percentage": item["percentage"]},
+                    },
+                    handle,
+                    allow_unicode=True,
+                    sort_keys=False,
+                )
+        messagebox.showinfo("Overrides exportados", f"Se exportaron en:\n{target_dir}")
 
 
 def run() -> None:

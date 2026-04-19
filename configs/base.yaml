@@ -1,28 +1,26 @@
 project:
   name: textforge
-  random_seed: 42
+  version: 0.2.0
 
 runtime:
-  log_level: INFO
+  random_seed: 42
+  sample_size: 8
+  max_preview_chars: 240
 
-dataset_target:
-  task: gpt_pretrain
-  target_domain: mixed
-  approximate_token_budget: 10000000
-  token_estimation_mode: heuristic
+text_normalization:
+  unicode_form: NFC
+  preserve_case: true
+  collapse_internal_whitespace: true
+  strip_outer_whitespace: true
+  remove_control_characters: true
+  repair_encoding_when_possible: true
+  replace_non_breaking_spaces: true
+  preserve_protocol_markers: true
 
-mixture:
-  strict_percentages: true
-  rebalance_if_insufficient: true
-  datasets: []
-
-filters:
-  preserve_raw_text: true
-  normalize_unicode: true
-  fix_encoding: true
-  normalize_whitespace: true
-  remove_control_chars: true
-
-output:
+phase1:
+  write_segments: true
+  write_pairs: true
+  write_documents: true
+  write_reports: true
   write_manifest: true
-  preferred_format: parquet
+  emit_unaligned_streams: true

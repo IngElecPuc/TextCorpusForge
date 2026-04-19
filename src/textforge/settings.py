@@ -24,8 +24,22 @@ class Settings:
             current = current[part]
         return current
 
+    def set(self, dotted_key: str, value: Any) -> None:
+        parts = dotted_key.split(".")
+        current = self.data
+        for part in parts[:-1]:
+            current = current.setdefault(part, {})
+        current[parts[-1]] = value
+
     def merge(self, other: "Settings") -> "Settings":
         return Settings(data=_deep_merge(dict(self.data), dict(other.data)))
+
+    def to_yaml(self, path: str | Path) -> Path:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            yaml.safe_dump(self.data, handle, allow_unicode=True, sort_keys=False)
+        return path
 
 
 def _deep_merge(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
